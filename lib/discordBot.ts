@@ -1,7 +1,10 @@
-import { Client, GatewayIntentBits, ChannelType, TextChannel, MessageMentions } from "discord.js";
+import { Client, GatewayIntentBits, ChannelType, TextChannel, MessageMentions, User } from "discord.js";
 import "dotenv/config";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" }); // Load .env.local manually
+
+// Max messages to search to prevent lag in long channels
+const MAX_SEARCH_DEPTH = 32;
 
 // Create a new Discord bot client
 const client = new Client({
@@ -22,57 +25,66 @@ client.on("messageCreate", async (message) => {
   // Handle the !quote command
   if (message.content.startsWith("!quote")) {
     const args = message.content.split(" ").slice(1); // Extract arguments
+    let targetUser: User | null = null;
+    let messagesUp = 1;
+    let ignoreBottom = 0;
 
-    // Set default values (assume !quote 1 0 if arguments are missing)
-    const messagesUp = parseInt(args[0] || "1", 10);
-    const ignoreBottom = parseInt(args[1] || "0", 10);
-
-    // Validate input
-    if (isNaN(messagesUp) || isNaN(ignoreBottom) || messagesUp <= 0 || ignoreBottom < 0 || ignoreBottom >= messagesUp) {
-      return message.reply("Invalid format! Use: `!quote <messages_up> <ignore_bottom>` or `!quote` (defaults to 1 0).");
+    // Check if the first argument is a user mention
+    if (args.length > 0 && message.mentions.users.size > 0) {
+      targetUser = message.mentions.users.first() || null;
+      args.shift(); // Remove the mention from the argument list
     }
 
+    // Extract numbers, default to `1 0`
+    messagesUp = parseInt(args[0] || "1", 10);
+    ignoreBottom = parseInt(args[1] || "0", 10);
+
+    // Validate numbers
+    if (isNaN(messagesUp) || isNaN(ignoreBottom) || messagesUp <= 0 || ignoreBottom < 0 || ignoreBottom >= messagesUp) {
+      return message.reply("Invalid format! Use: `!quote [@user] <messages_up> <ignore_bottom>` or `!quote` (defaults to 1 0).");
+    }
+
+    // Enforce search depth limit
+    messagesUp = Math.min(messagesUp, MAX_SEARCH_DEPTH);
+
     try {
-      // Fetch the last messages in the channel
-      const fetchedMessages = await message.channel.messages.fetch({ limit: messagesUp + 1 }); // +1 to exclude command itself
+      // Fetch messages, limit capped at MAX_SEARCH_DEPTH
+      const fetchedMessages = await message.channel.messages.fetch({ limit: MAX_SEARCH_DEPTH + 1 });
       const messagesArray = Array.from(fetchedMessages.values()).reverse(); // Convert to array (oldest -> newest)
       messagesArray.pop(); // Remove the command message itself
 
+      // If targeting a specific user, filter messages by them
+      let relevantMessages = messagesArray;
+      if (targetUser) {
+        relevantMessages = messagesArray.filter(msg => msg.author.id === targetUser?.id);
+      }
+
       // Validate there are enough messages
-      if (messagesArray.length < messagesUp) {
-        return message.reply("Not enough messages in this channel.");
+      if (relevantMessages.length < messagesUp) {
+        return message.reply("Not enough messages from this user.");
       }
 
       // Remove the bottom messages based on `ignoreBottom`
-      const relevantMessages = messagesArray.slice(0, messagesUp - ignoreBottom);
+      const selectedMessages = relevantMessages.slice(0, messagesUp - ignoreBottom);
 
-      // Ensure there's at least one valid message left
-      if (relevantMessages.length === 0) {
+      // Ensure at least one message remains
+      if (selectedMessages.length === 0) {
         return message.reply("No valid messages left after filtering.");
       }
 
-      // Get the original author of the first message in the range
-      const originalAuthor = relevantMessages[0].author;
-
-      // Filter out messages not sent by the original author
-      const filteredMessages = relevantMessages.filter(msg => msg.author.id === originalAuthor.id);
-
-      // Ensure at least one message remains after filtering
-      if (filteredMessages.length === 0) {
-        return message.reply("No valid messages found from the same user.");
-      }
+      // Get the original author
+      const originalAuthor = selectedMessages[0].author;
 
       // Prevent mentions from being quoted
-      const sanitizedMessages = filteredMessages.map(msg => {
-        return msg.content.replace(MessageMentions.UsersPattern, "[user]")
-                          .replace(MessageMentions.RolesPattern, "[role]")
-                          .replace(MessageMentions.EveryonePattern, "[everyone]");
-      });
+      const sanitizedMessages = selectedMessages.map(msg =>
+        msg.content
+          .replace(MessageMentions.UsersPattern, "[user]")
+          .replace(MessageMentions.RolesPattern, "[role]")
+          .replace(MessageMentions.EveryonePattern, "[everyone]")
+      );
 
       // Format messages in quote style
-      const quoteText = sanitizedMessages
-        .map(msg => `> "${msg}"`)
-        .join("\n");
+      const quoteText = sanitizedMessages.map(msg => `> "${msg}"`).join("\n");
 
       // Add author attribution
       const quoteMessage = `${quoteText}\n- ${originalAuthor.username}`;
@@ -94,7 +106,7 @@ client.on("messageCreate", async (message) => {
       const sentMessage = await youngestQuotesChannel.send(quoteMessage);
 
       // Reply to the **top quoted message** with a link to the new quote
-      await filteredMessages[0].reply(`Your quote has been posted in #${youngestQuotesChannel.name}: [Jump to Quote](${sentMessage.url})`);
+      await selectedMessages[0].reply(`Your quote has been posted in #${youngestQuotesChannel.name}: [Jump to Quote](${sentMessage.url})`);
 
     } catch (error) {
       console.error("Error processing quote command:", error);
