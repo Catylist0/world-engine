@@ -78,8 +78,9 @@ client.on("messageCreate", async (message) => {
       );
 
       const youngestQuotesChannel = channels
-        ?.sort((a, b) => b.createdTimestamp - a.createdTimestamp)
+        ?.sort((a, b) => (b.createdTimestamp ?? 0) - (a.createdTimestamp ?? 0))
         .first() as TextChannel | undefined;
+
 
       if (!youngestQuotesChannel) {
         return message.reply("No channel named 'quotes' found.");
