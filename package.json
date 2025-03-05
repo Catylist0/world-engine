@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "start:bot": "node lib/discordBot.ts"
+    "start:bot": "ts-node --project tsconfig.bot.json lib/discordBot.ts"
   },
   "dependencies": {
     "discord.js": "^14.18.0",

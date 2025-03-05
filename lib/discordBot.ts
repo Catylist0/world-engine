@@ -1,5 +1,10 @@
 import { Client, GatewayIntentBits } from "discord.js";
 import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" }); // Load .env.local manually
+
+//console.log("Loaded Bot Token:", process.env.DISCORD_BOT_TOKEN); // Debugging log
+
 
 // Create a new Discord bot client
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
@@ -17,10 +22,11 @@ client.on("messageCreate", async (message) => {
       const data = await response.json();
       
       if (data.date) {
-        message.reply(`Current date: ${data.date}`);
+        const formattedDate = new Date(data.date).toLocaleString("en-US", { timeZone: "UTC" });
+        message.reply(`Current date: ${formattedDate}`);
       } else {
         message.reply("Couldn't fetch the date.");
-      }
+      }      
     } catch (error) {
       console.error("Error fetching date:", error);
       message.reply("An error occurred while fetching the date.");
@@ -29,4 +35,5 @@ client.on("messageCreate", async (message) => {
 });
 
 // Log in the bot
+//console.log("Bot Token:", process.env.DISCORD_BOT_TOKEN);
 client.login(process.env.DISCORD_BOT_TOKEN);
