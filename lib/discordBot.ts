@@ -1,6 +1,8 @@
 import { Client, GatewayIntentBits, ChannelType, TextChannel, MessageMentions } from "discord.js";
 import "dotenv/config";
 import dotenv from "dotenv";
+import { storeQuote } from "../lib/db"; // Removed initializeDatabase
+
 dotenv.config({ path: ".env.local" }); // Load .env.local manually
 
 // Create a new Discord bot client
@@ -62,34 +64,15 @@ client.on("messageCreate", async (message) => {
         return message.reply("No valid messages found from the same user.");
       }
 
-      // Convert mentions to usernames
+      // Prevent mentions from being quoted
       const sanitizedMessages = filteredMessages.map(msg => {
-        let content = msg.content;
-
-        // Replace user mentions with usernames
-        content = content.replace(MessageMentions.UsersPattern, (match) => {
-          const userId = match.replace(/\D/g, ""); // Extract ID
-          const user = msg.mentions.users.get(userId);
-          return user ? `[${user.username}]` : "[unknown user]";
-        });
-
-        // Replace role mentions with role names
-        content = content.replace(MessageMentions.RolesPattern, (match) => {
-          const roleId = match.replace(/\D/g, ""); // Extract ID
-          const role = msg.mentions.roles.get(roleId);
-          return role ? `[${role.name}]` : "[unknown role]";
-        });
-
-        // Prevent @everyone and @here pings
-        content = content.replace(MessageMentions.EveryonePattern, "[everyone]");
-
-        return content;
+        return msg.content.replace(MessageMentions.UsersPattern, "[user]")
+                          .replace(MessageMentions.RolesPattern, "[role]")
+                          .replace(MessageMentions.EveryonePattern, "[everyone]");
       });
 
       // Format messages in quote style
-      const quoteText = sanitizedMessages
-        .map(msg => `> "${msg}"`)
-        .join("\n");
+      const quoteText = sanitizedMessages.map(msg => `> "${msg}"`).join("\n");
 
       // Add author attribution
       const quoteMessage = `${quoteText}\n- ${originalAuthor.username}`;
@@ -109,6 +92,9 @@ client.on("messageCreate", async (message) => {
 
       // Send the quote to the "quotes" channel
       const sentMessage = await youngestQuotesChannel.send(quoteMessage);
+
+      // Store the quote in the database
+      await storeQuote(sentMessage.id, sanitizedMessages, originalAuthor.username, message.author.username);
 
       // Reply to the **top quoted message** with a link to the new quote
       await filteredMessages[0].reply(`Your quote has been posted in #${youngestQuotesChannel.name}: [Jump to Quote](${sentMessage.url})`);
