@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits, ChannelType, TextChannel, MessageMentions } from "discord.js";
 import "dotenv/config";
 import dotenv from "dotenv";
-import { storeQuote } from "../lib/db"; // Removed initializeDatabase
+import { storeQuote } from "../lib/db";
 
 dotenv.config({ path: ".env.local" }); // Load .env.local manually
 
@@ -93,7 +93,7 @@ client.on("messageCreate", async (message) => {
       // Send the quote to the "quotes" channel
       const sentMessage = await youngestQuotesChannel.send(quoteMessage);
 
-      // Store the quote in the database
+      // Store the quote in the database using world_engine.quotes
       await storeQuote(sentMessage.id, sanitizedMessages, originalAuthor.username, message.author.username);
 
       // Reply to the **top quoted message** with a link to the new quote
