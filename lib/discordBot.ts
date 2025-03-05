@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, ChannelType, TextChannel } from "discord.js";
+import { Client, GatewayIntentBits, ChannelType, TextChannel, MessageMentions } from "discord.js";
 import "dotenv/config";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" }); // Load .env.local manually
@@ -23,15 +23,13 @@ client.on("messageCreate", async (message) => {
   if (message.content.startsWith("!quote")) {
     const args = message.content.split(" ").slice(1); // Extract arguments
 
-    if (args.length !== 2 || isNaN(Number(args[0])) || isNaN(Number(args[1]))) {
-      return message.reply("Invalid format! Use: `!quote <messages_up> <ignore_bottom>`");
-    }
+    // Set default values (assume !quote 1 0 if arguments are missing)
+    const messagesUp = parseInt(args[0] || "1", 10);
+    const ignoreBottom = parseInt(args[1] || "0", 10);
 
-    const messagesUp = parseInt(args[0], 10);
-    const ignoreBottom = parseInt(args[1], 10);
-
-    if (messagesUp <= 0 || ignoreBottom < 0 || ignoreBottom >= messagesUp) {
-      return message.reply("Invalid numbers! The first number must be greater than the second, and both must be non-negative.");
+    // Validate input
+    if (isNaN(messagesUp) || isNaN(ignoreBottom) || messagesUp <= 0 || ignoreBottom < 0 || ignoreBottom >= messagesUp) {
+      return message.reply("Invalid format! Use: `!quote <messages_up> <ignore_bottom>` or `!quote` (defaults to 1 0).");
     }
 
     try {
@@ -64,9 +62,16 @@ client.on("messageCreate", async (message) => {
         return message.reply("No valid messages found from the same user.");
       }
 
+      // Prevent mentions from being quoted
+      const sanitizedMessages = filteredMessages.map(msg => {
+        return msg.content.replace(MessageMentions.UsersPattern, "[user]")
+                          .replace(MessageMentions.RolesPattern, "[role]")
+                          .replace(MessageMentions.EveryonePattern, "[everyone]");
+      });
+
       // Format messages in quote style
-      const quoteText = filteredMessages
-        .map(msg => `> "${msg.content}"`)
+      const quoteText = sanitizedMessages
+        .map(msg => `> "${msg}"`)
         .join("\n");
 
       // Add author attribution
@@ -81,15 +86,15 @@ client.on("messageCreate", async (message) => {
         ?.sort((a, b) => (b.createdTimestamp ?? 0) - (a.createdTimestamp ?? 0))
         .first() as TextChannel | undefined;
 
-
       if (!youngestQuotesChannel) {
         return message.reply("No channel named 'quotes' found.");
       }
 
       // Send the quote to the "quotes" channel
-      await youngestQuotesChannel.send(quoteMessage);
+      const sentMessage = await youngestQuotesChannel.send(quoteMessage);
 
-      message.reply(`Quote successfully posted in #${youngestQuotesChannel.name}.`);
+      // Reply to the **top quoted message** with a link to the new quote
+      await filteredMessages[0].reply(`Your quote has been posted in #${youngestQuotesChannel.name}: [Jump to Quote](${sentMessage.url})`);
 
     } catch (error) {
       console.error("Error processing quote command:", error);
