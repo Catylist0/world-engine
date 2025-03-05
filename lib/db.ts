@@ -45,5 +45,20 @@ export async function storeQuote(messageId: string, content: string[], author: s
   }
 }
 
+// New function to fetch all quotes
+export async function getAllQuotes() {
+  const client = await pool.connect();
+  try {
+    const res = await client.query(`
+      SELECT message_id, content, author, quoted_by, quoted_at
+      FROM world_engine.quotes
+      ORDER BY quoted_at DESC
+    `);
+    return res.rows;
+  } finally {
+    client.release();
+  }
+}
+
 // Export pool for use in other modules
 export { pool };
