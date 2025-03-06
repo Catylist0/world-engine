@@ -60,5 +60,48 @@ export async function getAllQuotes() {
   }
 }
 
+/**
+ * Retrieves the nth most recent quote by the given user.
+ * @param quotedBy The username of the person who used !quote
+ * @param n 1 = most recent, 2 = second most recent, etc.
+ * @returns The matching quote row or null if none found.
+ */
+export async function getNthMostRecentQuoteByUser(quotedBy: string, n: number) {
+  const client = await pool.connect();
+  try {
+    // We select in descending order (most recent first),
+    // then skip (n-1) rows to get the nth quote.
+    const res = await client.query(`
+      SELECT message_id, content, author, quoted_by, quoted_at
+      FROM world_engine.quotes
+      WHERE quoted_by = $1
+      ORDER BY quoted_at DESC
+      LIMIT 1 OFFSET $2
+    `, [quotedBy, n - 1]);
+
+    if (res.rows.length === 0) {
+      return null;
+    }
+    return res.rows[0];
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Removes a quote from the database by message ID.
+ */
+export async function deleteQuote(messageId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      DELETE FROM world_engine.quotes
+      WHERE message_id = $1
+    `, [messageId]);
+  } finally {
+    client.release();
+  }
+}
+
 // Export pool for use in other modules
 export { pool };
