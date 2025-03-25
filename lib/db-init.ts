@@ -43,3 +43,5 @@ export async function initializeDatabase(): Promise<void> {
     client.release();
   }
 }
+
+initializeDatabase();
